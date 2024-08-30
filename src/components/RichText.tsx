@@ -70,7 +70,6 @@ export function RichText({
           selectable={selectable}
           testID={testID}
           style={[plainStyles, {fontSize}]}
-          // @ts-ignore web only -prf
           dataSet={WORD_WRAP}>
           {text}
         </Text>
@@ -83,7 +82,6 @@ export function RichText({
         testID={testID}
         style={plainStyles}
         numberOfLines={numberOfLines}
-        // @ts-ignore web only -prf
         dataSet={WORD_WRAP}>
         {text}
       </Text>
@@ -105,10 +103,10 @@ export function RichText({
       els.push(
         <ProfileHoverCard key={key} inline did={mention.did}>
           <InlineLinkText
+            label={segment.text}
             selectable={selectable}
             to={`/profile/${mention.did}`}
             style={interactiveStyles}
-            // @ts-ignore TODO
             dataSet={WORD_WRAP}
             onPress={onLinkPress}>
             {segment.text}
@@ -116,21 +114,22 @@ export function RichText({
         </ProfileHoverCard>,
       )
     } else if (link && AppBskyRichtextFacet.validateLink(link).success) {
+      const url = toShortUrl(segment.text)
       if (disableLinks) {
-        els.push(toShortUrl(segment.text))
+        els.push(url)
       } else {
         els.push(
           <InlineLinkText
+            label={url}
             selectable={selectable}
             key={key}
             to={link.uri}
             style={interactiveStyles}
-            // @ts-ignore TODO
             dataSet={WORD_WRAP}
             shareOnLongPress
             onPress={onLinkPress}
             emoji>
-            {toShortUrl(segment.text)}
+            {url}
           </InlineLinkText>,
         )
       }
@@ -166,7 +165,6 @@ export function RichText({
       testID={testID}
       style={plainStyles}
       numberOfLines={numberOfLines}
-      // @ts-ignore web only -prf
       dataSet={WORD_WRAP}>
       {els}
     </Text>
