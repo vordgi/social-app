@@ -59,7 +59,6 @@ import {usePalette} from '#/lib/hooks/usePalette'
 import {useWebMediaQueries} from '#/lib/hooks/useWebMediaQueries'
 import {logEvent} from '#/lib/statsig/statsig'
 import {cleanError} from '#/lib/strings/errors'
-import {shortenLinks} from '#/lib/strings/rich-text-manip'
 import {colors, s} from '#/lib/styles'
 import {logger} from '#/logger'
 import {isAndroid, isIOS, isNative, isWeb} from '#/platform/detection'
@@ -128,8 +127,6 @@ type CancelRef = {
   onPressCancel: () => void
 }
 
-const NO_IMAGES: ComposerImage[] = []
-
 type Props = ComposerOpts
 export const ComposePost = ({
   replyTo,
@@ -170,7 +167,8 @@ export const ComposePost = ({
   )
 
   // TODO: Display drafts for other posts in the thread.
-  const draft = composerState.thread.posts[composerState.activePostIndex]
+  const thread = composerState.thread
+  const draft = thread.posts[composerState.activePostIndex]
   const dispatch = useCallback((postAction: PostAction) => {
     composerDispatch({
       type: 'update_post',
@@ -178,33 +176,10 @@ export const ComposePost = ({
     })
   }, [])
 
-  const richtext = draft.richtext
-  let quote: string | undefined
-  if (draft.embed.quote) {
-    quote = draft.embed.quote.uri
-  }
-  let images = NO_IMAGES
-  if (draft.embed.media?.type === 'images') {
-    images = draft.embed.media.images
-  }
   let videoState: VideoState | NoVideoState = NO_VIDEO
   if (draft.embed.media?.type === 'video') {
     videoState = draft.embed.media.video
   }
-  let extGif: Gif | undefined
-  let extGifAlt: string | undefined
-  if (draft.embed.media?.type === 'gif') {
-    extGif = draft.embed.media.gif
-    extGifAlt = draft.embed.media.alt
-  }
-  let extLink: string | undefined
-  if (draft.embed.link) {
-    extLink = draft.embed.link.uri
-  }
-
-  const graphemeLength = useMemo(() => {
-    return shortenLinks(richtext).graphemeLength
-  }, [richtext])
 
   const selectVideo = React.useCallback(
     (asset: ImagePickerAsset) => {
@@ -252,10 +227,12 @@ export const ComposePost = ({
 
   const onPressCancel = useCallback(() => {
     if (
-      graphemeLength > 0 ||
-      images.length !== 0 ||
-      extGif ||
-      videoState.status !== 'idle'
+      thread.posts.some(
+        post =>
+          post.shortenedGraphemeLength > 0 ||
+          post.embed.media ||
+          post.embed.link,
+      )
     ) {
       closeAllDialogs()
       Keyboard.dismiss()
@@ -263,15 +240,7 @@ export const ComposePost = ({
     } else {
       onClose()
     }
-  }, [
-    extGif,
-    graphemeLength,
-    images.length,
-    closeAllDialogs,
-    discardPromptControl,
-    onClose,
-    videoState.status,
-  ])
+  }, [thread, closeAllDialogs, discardPromptControl, onClose])
 
   useImperativeHandle(cancelRef, () => ({onPressCancel}))
 
@@ -296,28 +265,38 @@ export const ComposePost = ({
   }, [onPressCancel, closeAllDialogs, closeAllModals])
 
   const isAltTextRequiredAndMissing = useMemo(() => {
-    if (!requireAltTextEnabled) return false
-
-    if (images.some(img => img.alt === '')) return true
-
-    if (extGif && !extGifAlt) return true
-
-    return false
-  }, [images, extGifAlt, extGif, requireAltTextEnabled])
-
-  const isEmptyPost =
-    richtext.text.trim().length === 0 &&
-    images.length === 0 &&
-    !extLink &&
-    !extGif &&
-    !quote &&
-    videoState.status === 'idle'
+    if (!requireAltTextEnabled) {
+      return false
+    }
+    return thread.posts.some(post => {
+      const media = post.embed.media
+      if (media) {
+        if (media.type === 'images' && media.images.some(img => !img.alt)) {
+          return true
+        }
+        if (media.type === 'gif' && !media.alt) {
+          return true
+        }
+      }
+    })
+  }, [thread, requireAltTextEnabled])
 
   const canPost =
-    graphemeLength <= MAX_GRAPHEME_LENGTH &&
     !isAltTextRequiredAndMissing &&
-    !isEmptyPost &&
-    videoState.status !== 'error'
+    thread.posts.every(
+      post =>
+        post.shortenedGraphemeLength <= MAX_GRAPHEME_LENGTH &&
+        !(
+          post.richtext.text.trim().length === 0 &&
+          !post.embed.link &&
+          !post.embed.media &&
+          !post.embed.quote
+        ) &&
+        !(
+          post.embed.media?.type === 'video' &&
+          post.embed.media.video.status === 'error'
+        ),
+    )
 
   const onPressPublish = React.useCallback(
     async (finishedUploading: boolean) => {
@@ -331,8 +310,12 @@ export const ComposePost = ({
 
       if (
         !finishedUploading &&
-        videoState.asset &&
-        videoState.status !== 'done'
+        thread.posts.some(
+          post =>
+            post.embed.media?.type === 'video' &&
+            post.embed.media.video.asset &&
+            post.embed.media.video.status !== 'done',
+        )
       ) {
         setPublishOnUpload(true)
         return
@@ -345,7 +328,7 @@ export const ComposePost = ({
       try {
         postUri = (
           await apilib.post(agent, queryClient, {
-            thread: composerState.thread,
+            thread,
             replyTo: replyTo?.uri,
             onStateChange: setPublishingStage,
             langs: toPostLanguages(langPrefs.postLanguage),
@@ -353,8 +336,8 @@ export const ComposePost = ({
         ).uri
         try {
           await whenAppViewReady(agent, postUri, res => {
-            const thread = res.data.thread
-            return AppBskyFeedDefs.isThreadViewPost(thread)
+            const postedThread = res.data.thread
+            return AppBskyFeedDefs.isThreadViewPost(postedThread)
           })
         } catch (waitErr: any) {
           logger.error(waitErr, {
@@ -365,7 +348,7 @@ export const ComposePost = ({
       } catch (e: any) {
         logger.error(e, {
           message: `Composer: create post failed`,
-          hasImages: images.length > 0,
+          hasImages: thread.posts.some(p => p.embed.media?.type === 'images'),
         })
 
         let err = cleanError(e.message)
@@ -381,14 +364,21 @@ export const ComposePost = ({
         return
       } finally {
         if (postUri) {
-          logEvent('post:create', {
-            imageCount: images.length,
-            isReply: replyTo != null,
-            hasLink: extLink != null,
-            hasQuote: quote != null,
-            langs: langPrefs.postLanguage,
-            logContext: 'Composer',
-          })
+          let index = 0
+          for (let post of thread.posts) {
+            logEvent('post:create', {
+              imageCount:
+                post.embed.media?.type === 'images'
+                  ? post.embed.media.images.length
+                  : 0,
+              isReply: index > 0 || !!replyTo,
+              hasLink: !!post.embed.link,
+              hasQuote: !!post.embed.quote,
+              langs: langPrefs.postLanguage,
+              logContext: 'Composer',
+            })
+            index++
+          }
         }
       }
       if (postUri && !replyTo) {
@@ -398,10 +388,10 @@ export const ComposePost = ({
       if (initQuote) {
         // We want to wait for the quote count to update before we call `onPost`, which will refetch data
         whenAppViewReady(agent, initQuote.uri, res => {
-          const thread = res.data.thread
+          const quotedThread = res.data.thread
           if (
-            AppBskyFeedDefs.isThreadViewPost(thread) &&
-            thread.post.quoteCount !== initQuote.quoteCount
+            AppBskyFeedDefs.isThreadViewPost(quotedThread) &&
+            quotedThread.post.quoteCount !== initQuote.quoteCount
           ) {
             onPost?.(postUri)
             return true
@@ -421,20 +411,15 @@ export const ComposePost = ({
     [
       _,
       agent,
-      composerState.thread,
-      extLink,
-      images,
+      thread,
       canPost,
       isPublishing,
       langPrefs.postLanguage,
       onClose,
       onPost,
-      quote,
       initQuote,
       replyTo,
       setLangPrefs,
-      videoState.asset,
-      videoState.status,
       queryClient,
     ],
   )
@@ -512,7 +497,7 @@ export const ComposePost = ({
             />
           </Animated.ScrollView>
 
-          <SuggestedLanguage text={richtext.text} />
+          <SuggestedLanguage text={draft.richtext.text} />
 
           <ComposerPills
             isReply={!!replyTo}
@@ -524,7 +509,6 @@ export const ComposePost = ({
 
           <ComposerFooter
             draft={draft}
-            graphemeLength={graphemeLength}
             dispatch={dispatch}
             onError={setError}
             onEmojiButtonPress={onEmojiButtonPress}
@@ -930,14 +914,12 @@ function ComposerPills({
 function ComposerFooter({
   draft,
   dispatch,
-  graphemeLength,
   onEmojiButtonPress,
   onError,
   onSelectVideo,
 }: {
   draft: PostDraft
   dispatch: (action: PostAction) => void
-  graphemeLength: number
   onEmojiButtonPress: () => void
   onError: (error: string) => void
   onSelectVideo: (asset: ImagePickerAsset) => void
@@ -1017,7 +999,10 @@ function ComposerFooter({
       </View>
       <View style={[a.flex_row, a.align_center, a.justify_between]}>
         <SelectLangBtn />
-        <CharProgress count={graphemeLength} style={{width: 65}} />
+        <CharProgress
+          count={draft.shortenedGraphemeLength}
+          style={{width: 65}}
+        />
       </View>
     </View>
   )
