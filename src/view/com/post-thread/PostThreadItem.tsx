@@ -671,6 +671,7 @@ function PostOuterWrapper({
         onPointerLeave={() => {
           setHover(false)
         }}>
+        <SubtleWebHover hover={hover} />
         {Array.from(Array(depth - 1)).map((_, n: number) => (
           <View
             key={`${post.uri}-padding-${n}`}
@@ -684,7 +685,7 @@ function PostOuterWrapper({
             ]}
           />
         ))}
-        <View style={{flex: 1}}>{children}</View>
+        <View style={a.flex_1}>{children}</View>
       </View>
     )
   }
