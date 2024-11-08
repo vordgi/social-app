@@ -39,7 +39,7 @@ export function ProfileHeaderMetrics({
 
   return (
     <View
-      style={[a.flex_row, a.gap_sm, a.align_center, a.pb_md, {zIndex: 10}]}
+      style={[a.flex_row, a.gap_sm, a.align_center, a.pb_md, a.z_10]}
       pointerEvents="box-none">
       <InlineLinkText
         testID="profileHeaderFollowersButton"
