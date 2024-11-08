@@ -237,7 +237,9 @@ export function Link({
 }
 
 export type InlineLinkProps = React.PropsWithChildren<
-  BaseLinkProps & TextStyleProp & Pick<TextProps, 'selectable' | 'dataSet'>
+  BaseLinkProps &
+    TextStyleProp &
+    Pick<TextProps, 'selectable' | 'dataSet' | 'emoji'>
 > &
   Pick<ButtonProps, 'label'> & {
     disableUnderline?: boolean
