@@ -5,7 +5,7 @@ import {AppBskyEmbedImages} from '@atproto/api'
 import {msg} from '@lingui/macro'
 import {useLingui} from '@lingui/react'
 
-import {useImageDimensions} from '#/lib/media/image-sizes'
+import type {Dimensions} from '#/lib/media/types'
 import {isNative} from '#/platform/detection'
 import {useLargeAltBadgeEnabled} from '#/state/preferences/large-alt-badge'
 import {atoms as a, useBreakpoints, useTheme} from '#/alf'
@@ -74,19 +74,25 @@ export function AutoSizedImage({
   const t = useTheme()
   const {_} = useLingui()
   const largeAlt = useLargeAltBadgeEnabled()
-  const [raw] = useImageDimensions({
-    src: image.thumb,
-    knownDimensions: image.aspectRatio ?? null,
-  })
+
+  const [fetchedDims, setFetchedDims] = React.useState<Dimensions | null>(null)
+  const dims = fetchedDims ?? image.aspectRatio
+  let aspectRatio: number | undefined
+  if (dims) {
+    aspectRatio = dims.width / dims.height
+    if (Number.isNaN(aspectRatio)) {
+      aspectRatio = undefined
+    }
+  }
 
   let constrained: number | undefined
   let max: number | undefined
   let rawIsCropped: boolean | undefined
-  if (raw !== undefined) {
+  if (aspectRatio !== undefined) {
     const ratio = 1 / 2 // max of 1:2 ratio in feeds
-    constrained = Math.max(raw, ratio)
-    max = Math.max(raw, 0.25) // max of 1:4 in thread
-    rawIsCropped = raw < constrained
+    constrained = Math.max(aspectRatio, ratio)
+    max = Math.max(aspectRatio, 0.25) // max of 1:4 in thread
+    rawIsCropped = aspectRatio < constrained
   }
 
   const cropDisabled = crop === 'none'
@@ -102,6 +108,9 @@ export function AutoSizedImage({
         accessibilityIgnoresInvertColors
         accessibilityLabel={image.alt}
         accessibilityHint=""
+        onLoad={e => {
+          setFetchedDims({width: e.source.width, height: e.source.height})
+        }}
       />
       <MediaInsetBorder />
 
