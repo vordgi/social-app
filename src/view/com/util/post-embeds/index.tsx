@@ -36,6 +36,7 @@ import {atoms as a, useTheme} from '#/alf'
 import * as ListCard from '#/components/ListCard'
 import {Embed as StarterPackCard} from '#/components/StarterPack/StarterPackCard'
 import {ContentHider} from '../../../../components/moderation/ContentHider'
+import {Dimensions} from '../../lightbox/ImageViewing/@types'
 import {AutoSizedImage} from '../images/AutoSizedImage'
 import {ImageLayoutGrid} from '../images/ImageLayoutGrid'
 import {ExternalLinkEmbed} from './ExternalLinkEmbed'
@@ -150,11 +151,13 @@ export function PostEmbeds({
       const _openLightbox = (
         index: number,
         thumbRects: (MeasuredDimensions | null)[],
+        fetchedDims: (Dimensions | null)[],
       ) => {
         openLightbox({
           images: items.map((item, i) => ({
             ...item,
             thumbRect: thumbRects[i] ?? null,
+            thumbDimensions: fetchedDims[i] ?? null,
             type: 'image',
           })),
           index,
@@ -163,11 +166,12 @@ export function PostEmbeds({
       const onPress = (
         index: number,
         refs: AnimatedRef<React.Component<{}, {}, any>>[],
+        fetchedDims: (Dimensions | null)[],
       ) => {
         runOnUI(() => {
           'worklet'
           const rects = refs.map(ref => (ref ? measure(ref) : null))
-          runOnJS(_openLightbox)(index, rects)
+          runOnJS(_openLightbox)(index, rects, fetchedDims)
         })()
       }
       const onPressIn = (_: number) => {
@@ -194,7 +198,7 @@ export function PostEmbeds({
                     : 'constrained'
                 }
                 image={image}
-                onPress={() => onPress(0, [containerRef])}
+                onPress={dims => onPress(0, [containerRef], [dims])}
                 onPressIn={() => onPressIn(0)}
                 hideBadge={
                   viewContext === PostEmbedViewContext.FeedEmbedRecordWithMedia

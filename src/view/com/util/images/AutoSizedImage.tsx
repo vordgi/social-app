@@ -67,7 +67,7 @@ export function AutoSizedImage({
   image: AppBskyEmbedImages.ViewImage
   crop?: 'none' | 'square' | 'constrained'
   hideBadge?: boolean
-  onPress?: () => void
+  onPress?: (fetchedDims: Dimensions | null) => void
   onLongPress?: () => void
   onPressIn?: () => void
 }) {
@@ -182,7 +182,7 @@ export function AutoSizedImage({
   if (cropDisabled) {
     return (
       <Pressable
-        onPress={onPress}
+        onPress={() => onPress?.(fetchedDims)}
         onLongPress={onLongPress}
         onPressIn={onPressIn}
         // alt here is what screen readers actually use
@@ -204,7 +204,7 @@ export function AutoSizedImage({
         fullBleed={crop === 'square'}
         aspectRatio={constrained ?? 1}>
         <Pressable
-          onPress={onPress}
+          onPress={() => onPress?.(fetchedDims)}
           onLongPress={onLongPress}
           onPressIn={onPressIn}
           // alt here is what screen readers actually use
